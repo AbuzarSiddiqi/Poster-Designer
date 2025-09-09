@@ -1,0 +1,210 @@
+import React, { useState } from 'react';
+import { AspectRatio, ImageFile } from '../types';
+import { ASPECT_RATIOS } from '../constants';
+import { Button } from './common/Button';
+import { Icon } from './common/Icon';
+
+interface ControlPanelProps {
+  onGenerate: (productImages: ImageFile[], concept: string, ratio: AspectRatio, referenceImage?: File, logoImage?: File) => void;
+  onEdit: (prompt: string) => void;
+  onSuggestConcept: (productImages: ImageFile[], hint: string) => Promise<string>;
+  isLoading: boolean;
+  isPosterGenerated: boolean;
+}
+
+const Section: React.FC<{ title: string; step: number; children: React.ReactNode, titleAction?: React.ReactNode }> = ({ title, step, children, titleAction }) => (
+  <div className="border-b border-cyan-500/20 pb-6 mb-6">
+    <div className="flex justify-between items-center mb-4">
+      <h3 className="text-lg font-bold text-cyan-400 flex items-center">
+        <span className="bg-cyan-500 text-gray-900 rounded-full h-6 w-6 flex items-center justify-center mr-3 text-sm font-black">{step}</span>
+        {title}
+      </h3>
+      {titleAction}
+    </div>
+    {children}
+  </div>
+);
+
+const ControlPanel: React.FC<ControlPanelProps> = ({ onGenerate, onEdit, onSuggestConcept, isLoading, isPosterGenerated }) => {
+  const [productImages, setProductImages] = useState<ImageFile[]>([]);
+  const [referenceImage, setReferenceImage] = useState<ImageFile | null>(null);
+  const [logoImage, setLogoImage] = useState<ImageFile | null>(null);
+  const [selectedRatio, setSelectedRatio] = useState<AspectRatio>('9:16');
+  const [concept, setConcept] = useState('');
+  const [posterHint, setPosterHint] = useState('');
+  const [editPrompt, setEditPrompt] = useState('');
+  const [isSuggesting, setIsSuggesting] = useState(false);
+
+
+  const handleProductFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      const newImageFiles: ImageFile[] = files.map(file => ({
+        id: crypto.randomUUID(),
+        file: file,
+        preview: URL.createObjectURL(file)
+      }));
+      setProductImages(prev => [...prev, ...newImageFiles]);
+      e.target.value = ''; // Reset file input
+    }
+  };
+
+  const removeProductImage = (id: string) => {
+    setProductImages(prev => prev.filter(img => img.id !== id));
+  };
+
+  const handleSingleFileChange = (e: React.ChangeEvent<HTMLInputElement>, setFile: React.Dispatch<React.SetStateAction<ImageFile | null>>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setFile({
+        id: crypto.randomUUID(),
+        file: file,
+        preview: URL.createObjectURL(file)
+      });
+    }
+  };
+  
+  const handleGenerateClick = () => {
+    if (productImages.length > 0 && concept && selectedRatio) {
+      onGenerate(productImages, concept, selectedRatio, referenceImage?.file, logoImage?.file);
+    }
+  };
+  
+  const handleEditClick = () => {
+    if(editPrompt){
+        onEdit(editPrompt);
+        setEditPrompt('');
+    }
+  };
+
+  const handleSuggestClick = async () => {
+    if (productImages.length === 0) return;
+    setIsSuggesting(true);
+    try {
+        const suggestion = await onSuggestConcept(productImages, posterHint);
+        setConcept(suggestion);
+    } catch (error) {
+        alert(error instanceof Error ? error.message : "Suggestion failed");
+    } finally {
+        setIsSuggesting(false);
+    }
+  };
+
+  const ImageInput: React.FC<{ id: string; label: string; image: ImageFile | null; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, onRemove: () => void }> = ({ id, label, image, onChange, onRemove }) => (
+    <div>
+        <label htmlFor={id} className="block text-sm font-medium text-gray-300 mb-2">{label}</label>
+        {image ? (
+            <div className="group relative">
+                <img src={image.preview} alt="preview" className="w-full h-32 object-cover rounded-lg border-2 border-gray-600"/>
+                <button onClick={onRemove} className="absolute top-2 right-2 p-1.5 bg-black/50 rounded-full text-white hover:bg-red-500/80 transition-all opacity-0 group-hover:opacity-100">
+                    <Icon icon="trash" className="h-5 w-5" />
+                </button>
+            </div>
+        ) : (
+            <label htmlFor={id} className="cursor-pointer flex flex-col items-center justify-center w-full h-32 border-2 border-gray-600 border-dashed rounded-lg bg-white/5 hover:bg-white/10 transition-all">
+                <Icon icon="upload" className="h-8 w-8 text-gray-400 mb-2" />
+                <p className="text-sm text-gray-400">Click to upload</p>
+            </label>
+        )}
+        <input id={id} type="file" className="hidden" accept="image/*" onChange={onChange} />
+    </div>
+  );
+
+  return (
+    <div className="w-full h-full bg-gray-800/50 backdrop-blur-md p-6 rounded-lg border border-cyan-500/20 overflow-y-auto">
+      <h2 className="text-2xl font-bold text-white mb-6 pb-4 border-b border-cyan-500/20">Poster Architect</h2>
+      
+      {!isPosterGenerated ? (
+        <>
+          <Section title="Upload Product Image(s)" step={1}>
+             <div className="grid grid-cols-3 gap-2 mb-2">
+                {productImages.map(image => (
+                    <div key={image.id} className="group relative aspect-square">
+                        <img src={image.preview} alt="product preview" className="w-full h-full object-cover rounded-lg border-2 border-gray-600"/>
+                        <button onClick={() => removeProductImage(image.id)} className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white hover:bg-red-500/80 transition-all opacity-0 group-hover:opacity-100">
+                            <Icon icon="trash" className="h-4 w-4" />
+                        </button>
+                    </div>
+                ))}
+            </div>
+            <label htmlFor="product-upload" className="cursor-pointer mt-2 flex items-center justify-center w-full py-2 border-2 border-gray-600 border-dashed rounded-lg bg-white/5 hover:bg-white/10 transition-all text-sm text-gray-400">
+                <Icon icon="upload" className="h-5 w-5 mr-2" />
+                Add Image(s)
+            </label>
+            <input id="product-upload" type="file" multiple className="hidden" accept="image/*" onChange={handleProductFileChange} />
+          </Section>
+
+          <Section title="Select Aspect Ratio" step={2}>
+            <div className="grid grid-cols-3 gap-2">
+              {ASPECT_RATIOS.map(ratio => (
+                <button 
+                  key={ratio} 
+                  onClick={() => setSelectedRatio(ratio)}
+                  className={`py-2 px-3 text-sm rounded-md transition-all border-2 ${selectedRatio === ratio ? 'bg-cyan-500 border-cyan-500 text-white font-bold' : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-cyan-600'}`}>
+                  {ratio}
+                </button>
+              ))}
+            </div>
+          </Section>
+
+          <Section title="Describe Your Vision" step={3} titleAction={
+             <Button onClick={handleSuggestClick} isLoading={isSuggesting} disabled={productImages.length === 0 || isSuggesting} variant="secondary" className="py-1 px-3 text-xs">
+                <Icon icon="sparkles" className="h-4 w-4" />
+                Suggest
+            </Button>
+          }>
+            <label htmlFor="poster-hint" className="block text-sm font-medium text-gray-300 mb-1">Your Quick Idea (Optional)</label>
+            <textarea
+                id="poster-hint"
+                value={posterHint}
+                onChange={(e) => setPosterHint(e.target.value)}
+                placeholder="e.g., modern, retro, summer vibe..."
+                className="w-full h-16 p-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all mb-4"
+            />
+            <div className="flex items-center text-gray-500 text-xs mb-2">
+                <span className="flex-grow border-t border-gray-600"></span>
+                <span className="px-2 whitespace-nowrap">AI-Generated Concept</span>
+                <span className="flex-grow border-t border-gray-600"></span>
+            </div>
+            <textarea
+              value={concept}
+              onChange={(e) => setConcept(e.target.value)}
+              placeholder="A detailed concept will appear here..."
+              className="w-full h-24 p-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
+            />
+            <div className="mt-4">
+              <ImageInput id="reference-upload" label="Reference Image (Optional)" image={referenceImage} onChange={(e) => handleSingleFileChange(e, setReferenceImage)} onRemove={() => setReferenceImage(null)} />
+            </div>
+          </Section>
+
+          <Section title="Add Brand Logo" step={4}>
+             <ImageInput id="logo-upload" label="Logo Image (Optional)" image={logoImage} onChange={(e) => handleSingleFileChange(e, setLogoImage)} onRemove={() => setLogoImage(null)} />
+          </Section>
+
+          <Button onClick={handleGenerateClick} isLoading={isLoading} disabled={productImages.length === 0 || !concept} className="w-full mt-4">
+            <Icon icon="sparkles" className="h-5 w-5" />
+            Generate Poster
+          </Button>
+        </>
+      ) : (
+        <>
+            <Section title="Refine Your Poster" step={5}>
+                <p className="text-gray-400 text-sm mb-4">Give the AI instructions to change the poster. Try things like "change the background to a beach" or "add a lens flare effect".</p>
+                <textarea
+                    value={editPrompt}
+                    onChange={(e) => setEditPrompt(e.target.value)}
+                    placeholder="Your instructions..."
+                    className="w-full h-28 p-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
+                />
+            </Section>
+            <Button onClick={handleEditClick} isLoading={isLoading} disabled={!editPrompt} className="w-full">
+                <Icon icon="edit" className="h-5 w-5" />
+                Apply Edit
+            </Button>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default ControlPanel;
