@@ -3,18 +3,26 @@ import { useState } from 'react';
 import ControlPanel from './components/ControlPanel';
 import GalleryPanel from './components/GalleryPanel';
 import Workspace from './components/Workspace';
+import MobileNav from './components/MobileNav';
 import { removeBackground, generatePoster, editPoster, suggestConcept } from './services/geminiService';
 import { AspectRatio, ImageFile } from './types';
 import { fileToBase64, getMimeType } from './utils/fileUtils';
 
 const App: React.FC = () => {
-    // FIX: Changed state property from `mime` to `mimeType` for consistency.
     const [productImagesNoBg, setProductImagesNoBg] = useState<{data: string, mimeType: string}[]>([]);
-    // FIX: Changed state property from `mime` to `mimeType` for consistency.
-    const [currentPoster, setCurrentPoster] = useState<{data: string, mimeType: string} | null>(null);
+    
+    // History state management
+    const [posterHistory, setPosterHistory] = useState<{data: string, mimeType: string}[]>([]);
+    const [historyIndex, setHistoryIndex] = useState<number>(-1);
+    
     const [savedPosters, setSavedPosters] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('');
+    const [activeView, setActiveView] = useState<'controls' | 'workspace' | 'gallery'>('workspace');
+
+    const currentPoster = historyIndex >= 0 ? posterHistory[historyIndex] : null;
+    const canUndo = historyIndex > 0;
+    const canRedo = historyIndex < posterHistory.length - 1;
 
     const handleSuggestConcept = async (productImages: ImageFile[], hint: string): Promise<string> => {
         try {
@@ -35,21 +43,19 @@ const App: React.FC = () => {
 
     const handleGenerate = async (productImageFiles: ImageFile[], concept: string, ratio: AspectRatio, referenceImageFile?: File, logoImageFile?: File) => {
         setIsLoading(true);
+        setActiveView('workspace');
         try {
-            // Step 1: Remove background from all product images
             setLoadingMessage(`Analyzing ${productImageFiles.length} product image(s)...`);
             const processedImages = await Promise.all(
                 productImageFiles.map(async (imgFile) => {
                     const base64 = await fileToBase64(imgFile.file);
                     const mime = getMimeType(imgFile.file);
                     const noBgData = await removeBackground(base64, mime);
-                    // FIX: Changed property from `mime` to `mimeType` to match the `generatePoster` function signature.
                     return { data: noBgData, mimeType: 'image/png' };
                 })
             );
             setProductImagesNoBg(processedImages);
             
-            // Step 2: Generate Poster
             setLoadingMessage('Crafting your poster vision...');
             let base64Ref: string | undefined, refMime: string | undefined;
             if (referenceImageFile) {
@@ -64,8 +70,11 @@ const App: React.FC = () => {
             }
             
             const posterData = await generatePoster(processedImages, concept, ratio, base64Ref, refMime, base64Logo, logoMime);
-            // FIX: Changed property from `mime` to `mimeType` for consistency.
-            setCurrentPoster({data: posterData, mimeType: 'image/png'});
+            const newPoster = {data: posterData, mimeType: 'image/png'};
+            
+            // Reset history with the new poster
+            setPosterHistory([newPoster]);
+            setHistoryIndex(0);
 
         } catch (error) {
             alert(error instanceof Error ? error.message : 'An unknown error occurred.');
@@ -78,12 +87,18 @@ const App: React.FC = () => {
     const handleEdit = async (prompt: string) => {
         if (!currentPoster) return;
         setIsLoading(true);
+        setActiveView('workspace');
         setLoadingMessage('Applying your creative edits...');
         try {
-            // FIX: Passed `currentPoster.mimeType` instead of `currentPoster.mime` to match `editPoster` function signature.
             const editedPosterData = await editPoster(currentPoster.data, currentPoster.mimeType, prompt);
-            // FIX: Changed property from `mime` to `mimeType` for consistency.
-            setCurrentPoster({data: editedPosterData, mimeType: 'image/png'});
+            const newPoster = {data: editedPosterData, mimeType: 'image/png'};
+
+            // Truncate future history if we've undone, then create a new edit branch
+            const newHistory = posterHistory.slice(0, historyIndex + 1);
+            
+            setPosterHistory([...newHistory, newPoster]);
+            setHistoryIndex(newHistory.length);
+
         } catch (error) {
             alert(error instanceof Error ? error.message : 'An unknown error occurred.');
         } finally {
@@ -92,10 +107,21 @@ const App: React.FC = () => {
         }
     };
 
+    const handleUndo = () => {
+        if (canUndo) {
+            setHistoryIndex(historyIndex - 1);
+        }
+    };
+
+    const handleRedo = () => {
+        if (canRedo) {
+            setHistoryIndex(historyIndex + 1);
+        }
+    };
+
     const handleDownload = () => {
         if (!currentPoster) return;
         const link = document.createElement('a');
-        // FIX: Used `currentPoster.mimeType` instead of `currentPoster.mime`.
         link.href = `data:${currentPoster.mimeType};base64,${currentPoster.data}`;
         link.download = 'ai-poster.png';
         document.body.appendChild(link);
@@ -105,7 +131,6 @@ const App: React.FC = () => {
 
     const handleDragStart = (e: React.DragEvent<HTMLImageElement>) => {
         if (currentPoster) {
-            // FIX: Used `currentPoster.mimeType` instead of `currentPoster.mime`.
             e.dataTransfer.setData('text/plain', `data:${currentPoster.mimeType};base64,${currentPoster.data}`);
         }
     };
@@ -122,29 +147,45 @@ const App: React.FC = () => {
         e.preventDefault();
     };
 
+    const controlPanel = <ControlPanel 
+        onGenerate={handleGenerate}
+        onEdit={handleEdit}
+        onSuggestConcept={handleSuggestConcept}
+        isLoading={isLoading}
+        isPosterGenerated={!!currentPoster}
+    />;
+
+    const workspace = <Workspace 
+        poster={currentPoster ? `data:${currentPoster.mimeType};base64,${currentPoster.data}` : null}
+        isLoading={isLoading}
+        loadingMessage={loadingMessage}
+        onDragStart={handleDragStart}
+        onDownload={handleDownload}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+    />;
+
+    const galleryPanel = <GalleryPanel posters={savedPosters} onDrop={handleDrop} onDragOver={handleDragOver}/>;
+
     return (
-        <div className="h-screen w-screen bg-gray-900 text-white p-4 flex gap-4 font-sans">
-            <div className="w-1/4 h-full">
-                <ControlPanel 
-                    onGenerate={handleGenerate}
-                    onEdit={handleEdit}
-                    onSuggestConcept={handleSuggestConcept}
-                    isLoading={isLoading}
-                    isPosterGenerated={!!currentPoster}
-                />
+        <div className="h-screen w-screen bg-gray-900 text-white font-sans">
+            {/* Desktop Layout: 3-column */}
+            <div className="hidden md:flex h-full w-full p-4 gap-4">
+                <div className="w-1/4 h-full">{controlPanel}</div>
+                <div className="w-1/2 h-full">{workspace}</div>
+                <div className="w-1/4 h-full">{galleryPanel}</div>
             </div>
-            <div className="w-1/2 h-full">
-                <Workspace 
-                    // FIX: Used `currentPoster.mimeType` instead of `currentPoster.mime`.
-                    poster={currentPoster ? `data:${currentPoster.mimeType};base64,${currentPoster.data}` : null}
-                    isLoading={isLoading}
-                    loadingMessage={loadingMessage}
-                    onDragStart={handleDragStart}
-                    onDownload={handleDownload}
-                />
-            </div>
-            <div className="w-1/4 h-full">
-                <GalleryPanel posters={savedPosters} onDrop={handleDrop} onDragOver={handleDragOver}/>
+
+            {/* Mobile Layout: Tabbed */}
+            <div className="md:hidden h-full w-full flex flex-col">
+                <main className="flex-grow p-2 pb-20 overflow-hidden">
+                    {activeView === 'controls' && controlPanel}
+                    {activeView === 'workspace' && workspace}
+                    {activeView === 'gallery' && galleryPanel}
+                </main>
+                <MobileNav activeView={activeView} setActiveView={setActiveView} />
             </div>
         </div>
     );

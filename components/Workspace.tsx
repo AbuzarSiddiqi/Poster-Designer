@@ -1,4 +1,3 @@
-
 import React from 'react';
 import Spinner from './common/Spinner';
 import { Icon } from './common/Icon';
@@ -9,9 +8,13 @@ interface WorkspaceProps {
   loadingMessage: string;
   onDragStart: (e: React.DragEvent<HTMLImageElement>) => void;
   onDownload: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
-const Workspace: React.FC<WorkspaceProps> = ({ poster, isLoading, loadingMessage, onDragStart, onDownload }) => {
+const Workspace: React.FC<WorkspaceProps> = ({ poster, isLoading, loadingMessage, onDragStart, onDownload, onUndo, onRedo, canUndo, canRedo }) => {
   return (
     <div className="relative w-full h-full bg-gray-900/50 flex items-center justify-center rounded-lg border-2 border-dashed border-gray-700 overflow-hidden">
       {isLoading && <Spinner message={loadingMessage} />}
@@ -33,13 +36,33 @@ const Workspace: React.FC<WorkspaceProps> = ({ poster, isLoading, loadingMessage
             draggable="true"
             onDragStart={onDragStart}
           />
-          <button 
-            onClick={onDownload}
-            className="absolute bottom-4 right-4 bg-cyan-500 text-white p-3 rounded-full shadow-lg hover:bg-cyan-400 transition-all hover:scale-110"
-            title="Download Poster"
+          <div 
+            className="absolute bottom-4 right-4 flex items-center gap-3"
             >
-            <Icon icon="download" className="h-6 w-6" />
-          </button>
+             <button
+                onClick={onUndo}
+                disabled={!canUndo}
+                className="bg-gray-800/80 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-all hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+                title="Undo"
+            >
+                <Icon icon="undo" className="h-6 w-6" />
+            </button>
+            <button
+                onClick={onRedo}
+                disabled={!canRedo}
+                className="bg-gray-800/80 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-all hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+                title="Redo"
+            >
+                <Icon icon="redo" className="h-6 w-6" />
+            </button>
+            <button 
+              onClick={onDownload}
+              className="bg-cyan-500 text-white p-3 rounded-full shadow-lg hover:bg-cyan-400 transition-all hover:scale-110"
+              title="Download Poster"
+              >
+              <Icon icon="download" className="h-6 w-6" />
+            </button>
+          </div>
         </>
       )}
     </div>

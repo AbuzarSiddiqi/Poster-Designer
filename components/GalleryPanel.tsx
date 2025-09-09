@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Icon } from './common/Icon';
 
@@ -25,7 +24,7 @@ const GalleryPanel: React.FC<GalleryPanelProps> = ({ posters, onDrop, onDragOver
       onDrop={onDrop}
       onDragOver={onDragOver}
     >
-      <h2 className="text-2xl font-bold text-white mb-6 pb-4 border-b border-cyan-500/20">My Posters</h2>
+      <h2 className="text-xl md:text-2xl font-bold text-white mb-6 pb-4 border-b border-cyan-500/20">My Posters</h2>
       <div className="h-[calc(100%-60px)] overflow-y-auto pr-2">
         {posters.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-gray-500 border-2 border-dashed border-gray-700 rounded-lg p-4">

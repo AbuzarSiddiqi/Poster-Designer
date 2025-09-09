@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { AspectRatio, ImageFile } from '../types';
 import { ASPECT_RATIOS } from '../constants';
@@ -162,7 +161,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ onGenerate, onEdit, onSugge
 
   return (
     <div className="w-full h-full bg-gray-800/50 backdrop-blur-md p-6 rounded-lg border border-cyan-500/20 overflow-y-auto">
-      <h2 className="text-2xl font-bold text-white mb-6 pb-4 border-b border-cyan-500/20">Poster Architect</h2>
+      <h2 className="text-xl md:text-2xl font-bold text-white mb-6 pb-4 border-b border-cyan-500/20">Poster Architect</h2>
       
       {!isPosterGenerated ? (
         <>
