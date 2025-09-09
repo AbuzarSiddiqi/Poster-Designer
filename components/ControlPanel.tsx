@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { AspectRatio, ImageFile } from '../types';
 import { ASPECT_RATIOS } from '../constants';
@@ -49,21 +50,41 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ onGenerate, onEdit, onSugge
     }
   };
 
+  const handleProductPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const items = e.clipboardData.items;
+    const files: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+            const file = items[i].getAsFile();
+            if (file) {
+                files.push(file);
+            }
+        }
+    }
+
+    if (files.length > 0) {
+        e.preventDefault();
+        const newImageFiles: ImageFile[] = files.map(file => ({
+            id: crypto.randomUUID(),
+            file: file,
+            preview: URL.createObjectURL(file)
+        }));
+        setProductImages(prev => [...prev, ...newImageFiles]);
+    }
+  };
+
   const removeProductImage = (id: string) => {
     setProductImages(prev => prev.filter(img => img.id !== id));
   };
-
-  const handleSingleFileChange = (e: React.ChangeEvent<HTMLInputElement>, setFile: React.Dispatch<React.SetStateAction<ImageFile | null>>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setFile({
+  
+  const handleSingleFileSelect = (file: File, setFile: React.Dispatch<React.SetStateAction<ImageFile | null>>) => {
+    setFile({
         id: crypto.randomUUID(),
         file: file,
         preview: URL.createObjectURL(file)
-      });
-    }
+    });
   };
-  
+
   const handleGenerateClick = () => {
     if (productImages.length > 0 && concept && selectedRatio) {
       onGenerate(productImages, concept, selectedRatio, referenceImage?.file, logoImage?.file);
@@ -90,25 +111,54 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ onGenerate, onEdit, onSugge
     }
   };
 
-  const ImageInput: React.FC<{ id: string; label: string; image: ImageFile | null; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, onRemove: () => void }> = ({ id, label, image, onChange, onRemove }) => (
-    <div>
-        <label htmlFor={id} className="block text-sm font-medium text-gray-300 mb-2">{label}</label>
-        {image ? (
-            <div className="group relative">
-                <img src={image.preview} alt="preview" className="w-full h-32 object-cover rounded-lg border-2 border-gray-600"/>
-                <button onClick={onRemove} className="absolute top-2 right-2 p-1.5 bg-black/50 rounded-full text-white hover:bg-red-500/80 transition-all opacity-0 group-hover:opacity-100">
-                    <Icon icon="trash" className="h-5 w-5" />
-                </button>
-            </div>
-        ) : (
-            <label htmlFor={id} className="cursor-pointer flex flex-col items-center justify-center w-full h-32 border-2 border-gray-600 border-dashed rounded-lg bg-white/5 hover:bg-white/10 transition-all">
-                <Icon icon="upload" className="h-8 w-8 text-gray-400 mb-2" />
-                <p className="text-sm text-gray-400">Click to upload</p>
-            </label>
-        )}
-        <input id={id} type="file" className="hidden" accept="image/*" onChange={onChange} />
-    </div>
-  );
+  const ImageInput: React.FC<{ id: string; label: string; image: ImageFile | null; onFileSelect: (file: File) => void, onRemove: () => void }> = ({ id, label, image, onFileSelect, onRemove }) => {
+    
+    const handlePaste = (e: React.ClipboardEvent<HTMLLabelElement>) => {
+        const items = e.clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                const file = items[i].getAsFile();
+                if (file) {
+                    e.preventDefault();
+                    onFileSelect(file);
+                    break; 
+                }
+            }
+        }
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            onFileSelect(e.target.files[0]);
+            e.target.value = ''; // Reset
+        }
+    };
+
+    return (
+        <div>
+            <label htmlFor={id} className="block text-sm font-medium text-gray-300 mb-2">{label}</label>
+            {image ? (
+                <div className="group relative">
+                    <img src={image.preview} alt="preview" className="w-full h-32 object-cover rounded-lg border-2 border-gray-600"/>
+                    <button onClick={onRemove} className="absolute top-2 right-2 p-1.5 bg-black/50 rounded-full text-white hover:bg-red-500/80 transition-all opacity-0 group-hover:opacity-100">
+                        <Icon icon="trash" className="h-5 w-5" />
+                    </button>
+                </div>
+            ) : (
+                <label 
+                  htmlFor={id} 
+                  onPaste={handlePaste}
+                  tabIndex={0}
+                  className="cursor-pointer flex flex-col items-center justify-center w-full h-32 border-2 border-gray-600 border-dashed rounded-lg bg-white/5 hover:bg-white/10 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-cyan-500"
+                >
+                    <Icon icon="upload" className="h-8 w-8 text-gray-400 mb-2" />
+                    <p className="text-sm text-gray-400">Click or paste to upload</p>
+                </label>
+            )}
+            <input id={id} type="file" className="hidden" accept="image/*" onChange={handleChange} />
+        </div>
+    );
+  };
 
   return (
     <div className="w-full h-full bg-gray-800/50 backdrop-blur-md p-6 rounded-lg border border-cyan-500/20 overflow-y-auto">
@@ -117,21 +167,24 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ onGenerate, onEdit, onSugge
       {!isPosterGenerated ? (
         <>
           <Section title="Upload Product Image(s)" step={1}>
-             <div className="grid grid-cols-3 gap-2 mb-2">
-                {productImages.map(image => (
-                    <div key={image.id} className="group relative aspect-square">
-                        <img src={image.preview} alt="product preview" className="w-full h-full object-cover rounded-lg border-2 border-gray-600"/>
-                        <button onClick={() => removeProductImage(image.id)} className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white hover:bg-red-500/80 transition-all opacity-0 group-hover:opacity-100">
-                            <Icon icon="trash" className="h-4 w-4" />
-                        </button>
-                    </div>
-                ))}
-            </div>
-            <label htmlFor="product-upload" className="cursor-pointer mt-2 flex items-center justify-center w-full py-2 border-2 border-gray-600 border-dashed rounded-lg bg-white/5 hover:bg-white/10 transition-all text-sm text-gray-400">
-                <Icon icon="upload" className="h-5 w-5 mr-2" />
-                Add Image(s)
-            </label>
-            <input id="product-upload" type="file" multiple className="hidden" accept="image/*" onChange={handleProductFileChange} />
+            <div onPaste={handleProductPaste} tabIndex={0} className="focus:outline-none focus:ring-2 focus:ring-cyan-500/50 rounded-lg p-1 -m-1">
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                    {productImages.map(image => (
+                        <div key={image.id} className="group relative aspect-square">
+                            <img src={image.preview} alt="product preview" className="w-full h-full object-cover rounded-lg border-2 border-gray-600"/>
+                            <button onClick={() => removeProductImage(image.id)} className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white hover:bg-red-500/80 transition-all opacity-0 group-hover:opacity-100">
+                                <Icon icon="trash" className="h-4 w-4" />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+                <label htmlFor="product-upload" className="cursor-pointer mt-2 flex items-center justify-center w-full py-2 border-2 border-gray-600 border-dashed rounded-lg bg-white/5 hover:bg-white/10 transition-all text-sm text-gray-400">
+                    <Icon icon="upload" className="h-5 w-5 mr-2" />
+                    Add Image(s)
+                </label>
+                <input id="product-upload" type="file" multiple className="hidden" accept="image/*" onChange={handleProductFileChange} />
+                <p className="text-xs text-center text-gray-500 mt-2">You can also paste images from your clipboard.</p>
+             </div>
           </Section>
 
           <Section title="Select Aspect Ratio" step={2}>
@@ -173,12 +226,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ onGenerate, onEdit, onSugge
               className="w-full h-24 p-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
             />
             <div className="mt-4">
-              <ImageInput id="reference-upload" label="Reference Image (Optional)" image={referenceImage} onChange={(e) => handleSingleFileChange(e, setReferenceImage)} onRemove={() => setReferenceImage(null)} />
+              <ImageInput id="reference-upload" label="Reference Image (Optional)" image={referenceImage} onFileSelect={(file) => handleSingleFileSelect(file, setReferenceImage)} onRemove={() => setReferenceImage(null)} />
             </div>
           </Section>
 
           <Section title="Add Brand Logo" step={4}>
-             <ImageInput id="logo-upload" label="Logo Image (Optional)" image={logoImage} onChange={(e) => handleSingleFileChange(e, setLogoImage)} onRemove={() => setLogoImage(null)} />
+             <ImageInput id="logo-upload" label="Logo Image (Optional)" image={logoImage} onFileSelect={(file) => handleSingleFileSelect(file, setLogoImage)} onRemove={() => setLogoImage(null)} />
           </Section>
 
           <Button onClick={handleGenerateClick} isLoading={isLoading} disabled={productImages.length === 0 || !concept} className="w-full mt-4">
