@@ -5,11 +5,27 @@ import { Button } from './common/Button';
 import { Icon } from './common/Icon';
 
 interface ControlPanelProps {
-  onGenerate: (productImages: ImageFile[], concept: string, ratio: AspectRatio, referenceImage?: File, logoImage?: File) => void;
-  onEdit: (prompt: string) => void;
-  onSuggestConcept: (productImages: ImageFile[], hint: string) => Promise<string>;
+  onGenerate: () => void;
+  onEdit: () => void;
+  onSuggestConcept: () => Promise<string>;
   isLoading: boolean;
   isPosterGenerated: boolean;
+
+  // Lifted state and setters
+  productImages: ImageFile[];
+  setProductImages: React.Dispatch<React.SetStateAction<ImageFile[]>>;
+  referenceImage: ImageFile | null;
+  setReferenceImage: React.Dispatch<React.SetStateAction<ImageFile | null>>;
+  logoImage: ImageFile | null;
+  setLogoImage: React.Dispatch<React.SetStateAction<ImageFile | null>>;
+  selectedRatio: AspectRatio;
+  setSelectedRatio: React.Dispatch<React.SetStateAction<AspectRatio>>;
+  concept: string;
+  setConcept: React.Dispatch<React.SetStateAction<string>>;
+  posterHint: string;
+  setPosterHint: React.Dispatch<React.SetStateAction<string>>;
+  editPrompt: string;
+  setEditPrompt: React.Dispatch<React.SetStateAction<string>>;
 }
 
 const Section: React.FC<{ title: string; step: number; children: React.ReactNode, titleAction?: React.ReactNode }> = ({ title, step, children, titleAction }) => (
@@ -25,16 +41,28 @@ const Section: React.FC<{ title: string; step: number; children: React.ReactNode
   </div>
 );
 
-const ControlPanel: React.FC<ControlPanelProps> = ({ onGenerate, onEdit, onSuggestConcept, isLoading, isPosterGenerated }) => {
-  const [productImages, setProductImages] = useState<ImageFile[]>([]);
-  const [referenceImage, setReferenceImage] = useState<ImageFile | null>(null);
-  const [logoImage, setLogoImage] = useState<ImageFile | null>(null);
-  const [selectedRatio, setSelectedRatio] = useState<AspectRatio>('9:16');
-  const [concept, setConcept] = useState('');
-  const [posterHint, setPosterHint] = useState('');
-  const [editPrompt, setEditPrompt] = useState('');
+const ControlPanel: React.FC<ControlPanelProps> = ({ 
+    onGenerate, 
+    onEdit, 
+    onSuggestConcept, 
+    isLoading, 
+    isPosterGenerated,
+    productImages,
+    setProductImages,
+    referenceImage,
+    setReferenceImage,
+    logoImage,
+    setLogoImage,
+    selectedRatio,
+    setSelectedRatio,
+    concept,
+    setConcept,
+    posterHint,
+    setPosterHint,
+    editPrompt,
+    setEditPrompt,
+}) => {
   const [isSuggesting, setIsSuggesting] = useState(false);
-
 
   const handleProductFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -85,15 +113,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ onGenerate, onEdit, onSugge
   };
 
   const handleGenerateClick = () => {
-    if (productImages.length > 0 && concept && selectedRatio) {
-      onGenerate(productImages, concept, selectedRatio, referenceImage?.file, logoImage?.file);
-    }
+    onGenerate();
   };
   
   const handleEditClick = () => {
     if(editPrompt){
-        onEdit(editPrompt);
-        setEditPrompt('');
+        onEdit();
     }
   };
 
@@ -101,7 +126,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ onGenerate, onEdit, onSugge
     if (productImages.length === 0) return;
     setIsSuggesting(true);
     try {
-        const suggestion = await onSuggestConcept(productImages, posterHint);
+        const suggestion = await onSuggestConcept();
         setConcept(suggestion);
     } catch (error) {
         alert(error instanceof Error ? error.message : "Suggestion failed");

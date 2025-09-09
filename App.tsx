@@ -7,24 +7,34 @@ import MobileNav from './components/MobileNav';
 import { removeBackground, generatePoster, editPoster, suggestConcept } from './services/geminiService';
 import { AspectRatio, ImageFile } from './types';
 import { fileToBase64, getMimeType } from './utils/fileUtils';
+import { useHistoryState } from './hooks/useHistoryState';
 
 const App: React.FC = () => {
-    const [productImagesNoBg, setProductImagesNoBg] = useState<{data: string, mimeType: string}[]>([]);
-    
-    // History state management
-    const [posterHistory, setPosterHistory] = useState<{data: string, mimeType: string}[]>([]);
-    const [historyIndex, setHistoryIndex] = useState<number>(-1);
+    // State lifted from ControlPanel to persist across mobile view changes
+    const [productImages, setProductImages] = useState<ImageFile[]>([]);
+    const [referenceImage, setReferenceImage] = useState<ImageFile | null>(null);
+    const [logoImage, setLogoImage] = useState<ImageFile | null>(null);
+    const [selectedRatio, setSelectedRatio] = useState<AspectRatio>('9:16');
+    const [concept, setConcept] = useState('');
+    const [posterHint, setPosterHint] = useState('');
+    const [editPrompt, setEditPrompt] = useState('');
+
+    // History state management using custom hook
+    const {
+        current: currentPoster,
+        setState: setPosterState,
+        undo,
+        redo,
+        canUndo,
+        canRedo,
+    } = useHistoryState<{data: string, mimeType: string}>();
     
     const [savedPosters, setSavedPosters] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('');
     const [activeView, setActiveView] = useState<'controls' | 'workspace' | 'gallery'>('workspace');
 
-    const currentPoster = historyIndex >= 0 ? posterHistory[historyIndex] : null;
-    const canUndo = historyIndex > 0;
-    const canRedo = historyIndex < posterHistory.length - 1;
-
-    const handleSuggestConcept = async (productImages: ImageFile[], hint: string): Promise<string> => {
+    const handleSuggestConcept = async (): Promise<string> => {
         try {
             const imagePayload = await Promise.all(
                 productImages.map(async (imgFile) => ({
@@ -32,7 +42,16 @@ const App: React.FC = () => {
                     mimeType: getMimeType(imgFile.file),
                 }))
             );
-            const suggestion = await suggestConcept(imagePayload, hint);
+
+            let referencePayload: { base64: string, mimeType: string } | undefined;
+            if (referenceImage?.file) {
+                referencePayload = {
+                    base64: await fileToBase64(referenceImage.file),
+                    mimeType: getMimeType(referenceImage.file)
+                };
+            }
+
+            const suggestion = await suggestConcept(imagePayload, posterHint, referencePayload);
             return suggestion;
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to get suggestion.';
@@ -41,40 +60,39 @@ const App: React.FC = () => {
         }
     };
 
-    const handleGenerate = async (productImageFiles: ImageFile[], concept: string, ratio: AspectRatio, referenceImageFile?: File, logoImageFile?: File) => {
+    const handleGenerate = async () => {
+        if (productImages.length === 0 || !concept) return;
+
         setIsLoading(true);
         setActiveView('workspace');
         try {
-            setLoadingMessage(`Analyzing ${productImageFiles.length} product image(s)...`);
+            setLoadingMessage(`Analyzing ${productImages.length} product image(s)...`);
             const processedImages = await Promise.all(
-                productImageFiles.map(async (imgFile) => {
+                productImages.map(async (imgFile) => {
                     const base64 = await fileToBase64(imgFile.file);
                     const mime = getMimeType(imgFile.file);
                     const noBgData = await removeBackground(base64, mime);
                     return { data: noBgData, mimeType: 'image/png' };
                 })
             );
-            setProductImagesNoBg(processedImages);
             
             setLoadingMessage('Crafting your poster vision...');
             let base64Ref: string | undefined, refMime: string | undefined;
-            if (referenceImageFile) {
-                base64Ref = await fileToBase64(referenceImageFile);
-                refMime = getMimeType(referenceImageFile);
+            if (referenceImage?.file) {
+                base64Ref = await fileToBase64(referenceImage.file);
+                refMime = getMimeType(referenceImage.file);
             }
 
             let base64Logo: string | undefined, logoMime: string | undefined;
-            if (logoImageFile) {
-                base64Logo = await fileToBase64(logoImageFile);
-                logoMime = getMimeType(logoImageFile);
+            if (logoImage?.file) {
+                base64Logo = await fileToBase64(logoImage.file);
+                logoMime = getMimeType(logoImage.file);
             }
             
-            const posterData = await generatePoster(processedImages, concept, ratio, base64Ref, refMime, base64Logo, logoMime);
+            const posterData = await generatePoster(processedImages, concept, selectedRatio, base64Ref, refMime, base64Logo, logoMime);
             const newPoster = {data: posterData, mimeType: 'image/png'};
             
-            // Reset history with the new poster
-            setPosterHistory([newPoster]);
-            setHistoryIndex(0);
+            setPosterState(newPoster, true);
 
         } catch (error) {
             alert(error instanceof Error ? error.message : 'An unknown error occurred.');
@@ -84,38 +102,24 @@ const App: React.FC = () => {
         }
     };
 
-    const handleEdit = async (prompt: string) => {
-        if (!currentPoster) return;
+    const handleEdit = async () => {
+        if (!currentPoster || !editPrompt) return;
+
         setIsLoading(true);
         setActiveView('workspace');
         setLoadingMessage('Applying your creative edits...');
         try {
-            const editedPosterData = await editPoster(currentPoster.data, currentPoster.mimeType, prompt);
+            const editedPosterData = await editPoster(currentPoster.data, currentPoster.mimeType, editPrompt);
             const newPoster = {data: editedPosterData, mimeType: 'image/png'};
-
-            // Truncate future history if we've undone, then create a new edit branch
-            const newHistory = posterHistory.slice(0, historyIndex + 1);
             
-            setPosterHistory([...newHistory, newPoster]);
-            setHistoryIndex(newHistory.length);
+            setPosterState(newPoster);
+            setEditPrompt(''); // Clear prompt after submission
 
         } catch (error) {
             alert(error instanceof Error ? error.message : 'An unknown error occurred.');
         } finally {
             setIsLoading(false);
             setLoadingMessage('');
-        }
-    };
-
-    const handleUndo = () => {
-        if (canUndo) {
-            setHistoryIndex(historyIndex - 1);
-        }
-    };
-
-    const handleRedo = () => {
-        if (canRedo) {
-            setHistoryIndex(historyIndex + 1);
         }
     };
 
@@ -148,11 +152,27 @@ const App: React.FC = () => {
     };
 
     const controlPanel = <ControlPanel 
+        isLoading={isLoading}
+        isPosterGenerated={!!currentPoster}
+        // State and setters
+        productImages={productImages}
+        setProductImages={setProductImages}
+        referenceImage={referenceImage}
+        setReferenceImage={setReferenceImage}
+        logoImage={logoImage}
+        setLogoImage={setLogoImage}
+        selectedRatio={selectedRatio}
+        setSelectedRatio={setSelectedRatio}
+        concept={concept}
+        setConcept={setConcept}
+        posterHint={posterHint}
+        setPosterHint={setPosterHint}
+        editPrompt={editPrompt}
+        setEditPrompt={setEditPrompt}
+        // Handlers
         onGenerate={handleGenerate}
         onEdit={handleEdit}
         onSuggestConcept={handleSuggestConcept}
-        isLoading={isLoading}
-        isPosterGenerated={!!currentPoster}
     />;
 
     const workspace = <Workspace 
@@ -161,8 +181,8 @@ const App: React.FC = () => {
         loadingMessage={loadingMessage}
         onDragStart={handleDragStart}
         onDownload={handleDownload}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
+        onUndo={undo}
+        onRedo={redo}
         canUndo={canUndo}
         canRedo={canRedo}
     />;
@@ -180,7 +200,7 @@ const App: React.FC = () => {
 
             {/* Mobile Layout: Tabbed */}
             <div className="md:hidden h-full w-full flex flex-col">
-                <main className="flex-grow p-2 pb-20 overflow-hidden">
+                <main className="flex-grow p-2 pb-20 overflow-y-auto">
                     {activeView === 'controls' && controlPanel}
                     {activeView === 'workspace' && workspace}
                     {activeView === 'gallery' && galleryPanel}
