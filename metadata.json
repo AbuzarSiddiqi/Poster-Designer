@@ -1,5 +1,5 @@
 {
-  "name": "Copy of Poster 1",
+  "name": "Poster Generator",
   "description": "An interactive application that leverages AI to design stunning product posters. Users can upload product images, let the AI remove backgrounds, provide a creative concept, and iteratively refine the generated poster to perfection.",
   "requestFramePermissions": []
 }

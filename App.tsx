@@ -18,6 +18,7 @@ const App: React.FC = () => {
     const [concept, setConcept] = useState('');
     const [posterHint, setPosterHint] = useState('');
     const [editPrompt, setEditPrompt] = useState('');
+    const [editMode, setEditMode] = useState<'create' | 'direct-edit'>('create');
 
     // History state management using custom hook
     const {
@@ -27,6 +28,7 @@ const App: React.FC = () => {
         redo,
         canUndo,
         canRedo,
+        reset: resetPosterHistory,
     } = useHistoryState<{data: string, mimeType: string}>();
     
     const [savedPosters, setSavedPosters] = useState<string[]>([]);
@@ -123,6 +125,36 @@ const App: React.FC = () => {
         }
     };
 
+    const handleUploadPosterForEditing = async (file: File) => {
+        if (!file) return;
+        setIsLoading(true);
+        setLoadingMessage('Preparing your image...');
+        setActiveView('workspace');
+        try {
+            const base64 = await fileToBase64(file);
+            const mimeType = getMimeType(file);
+            setPosterState({ data: base64, mimeType }, true); 
+        } catch (error) {
+            console.error("Error loading image for editing:", error);
+            alert("Sorry, there was a problem loading your image. Please try another one.");
+        } finally {
+            setIsLoading(false);
+            setLoadingMessage('');
+        }
+    };
+
+    const handleStartOver = () => {
+        resetPosterHistory();
+        setProductImages([]);
+        setReferenceImage(null);
+        setLogoImage(null);
+        setConcept('');
+        setPosterHint('');
+        setEditPrompt('');
+        setEditMode('create');
+        setActiveView('controls');
+    };
+
     const handleDownload = () => {
         if (!currentPoster) return;
         const link = document.createElement('a');
@@ -169,10 +201,14 @@ const App: React.FC = () => {
         setPosterHint={setPosterHint}
         editPrompt={editPrompt}
         setEditPrompt={setEditPrompt}
+        editMode={editMode}
+        setEditMode={setEditMode}
         // Handlers
         onGenerate={handleGenerate}
         onEdit={handleEdit}
         onSuggestConcept={handleSuggestConcept}
+        onStartOver={handleStartOver}
+        onUploadPosterForEditing={handleUploadPosterForEditing}
     />;
 
     const workspace = <Workspace 

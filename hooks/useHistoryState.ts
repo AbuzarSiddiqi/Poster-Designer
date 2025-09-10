@@ -42,6 +42,13 @@ export const useHistoryState = <T>(initialState: T[] = [], initialIndex: number 
     }
   }, [canRedo, index]);
 
+  // Resets the history to its initial state.
+  const reset = useCallback(() => {
+    setHistory(initialState);
+    setIndex(initialIndex);
+  }, [initialState, initialIndex]);
+
+
   return {
     current,
     setState,
@@ -49,5 +56,6 @@ export const useHistoryState = <T>(initialState: T[] = [], initialIndex: number 
     redo,
     canUndo,
     canRedo,
+    reset,
   };
 };

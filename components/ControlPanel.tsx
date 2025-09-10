@@ -8,6 +8,8 @@ interface ControlPanelProps {
   onGenerate: () => void;
   onEdit: () => void;
   onSuggestConcept: () => Promise<string>;
+  onStartOver: () => void;
+  onUploadPosterForEditing: (file: File) => void;
   isLoading: boolean;
   isPosterGenerated: boolean;
 
@@ -26,6 +28,8 @@ interface ControlPanelProps {
   setPosterHint: React.Dispatch<React.SetStateAction<string>>;
   editPrompt: string;
   setEditPrompt: React.Dispatch<React.SetStateAction<string>>;
+  editMode: 'create' | 'direct-edit';
+  setEditMode: (mode: 'create' | 'direct-edit') => void;
 }
 
 const Section: React.FC<{ title: string; step: number; children: React.ReactNode, titleAction?: React.ReactNode }> = ({ title, step, children, titleAction }) => (
@@ -61,6 +65,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     setPosterHint,
     editPrompt,
     setEditPrompt,
+    editMode,
+    setEditMode,
+    onStartOver,
+    onUploadPosterForEditing
 }) => {
   const [isSuggesting, setIsSuggesting] = useState(false);
 
@@ -135,6 +143,27 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     }
   };
 
+  const handleDirectEditChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+        onUploadPosterForEditing(e.target.files[0]);
+        e.target.value = '';
+    }
+  };
+
+  const handleDirectEditPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+      const items = e.clipboardData.items;
+      for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image') !== -1) {
+              const file = items[i].getAsFile();
+              if (file) {
+                  e.preventDefault();
+                  onUploadPosterForEditing(file);
+                  break; 
+              }
+          }
+      }
+  };
+
   const ImageInput: React.FC<{ id: string; label: string; image: ImageFile | null; onFileSelect: (file: File) => void, onRemove: () => void }> = ({ id, label, image, onFileSelect, onRemove }) => {
     
     const handlePaste = (e: React.ClipboardEvent<HTMLLabelElement>) => {
@@ -186,9 +215,46 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
   return (
     <div className="w-full h-full bg-gray-800/50 backdrop-blur-md p-6 rounded-lg border border-cyan-500/20 overflow-y-auto">
-      <h2 className="text-xl md:text-2xl font-bold text-white mb-6 pb-4 border-b border-cyan-500/20">Poster Architect</h2>
+      <h2 className="text-xl md:text-2xl font-bold text-white mb-2 pb-4 border-b border-cyan-500/20">Poster Architect</h2>
       
-      {!isPosterGenerated ? (
+      {!isPosterGenerated && (
+          <div className="flex mb-4 -mt-2">
+              <button 
+                  onClick={() => setEditMode('create')}
+                  className={`flex-1 py-2 text-center font-semibold transition-colors text-sm rounded-t-md ${editMode === 'create' ? 'text-cyan-300 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}
+              >
+                  Create New Poster
+              </button>
+              <button 
+                  onClick={() => setEditMode('direct-edit')}
+                  className={`flex-1 py-2 text-center font-semibold transition-colors text-sm rounded-t-md ${editMode === 'direct-edit' ? 'text-cyan-300 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}
+              >
+                  Edit Existing Image
+              </button>
+          </div>
+      )}
+
+      {isPosterGenerated ? (
+        <>
+            <Section title="Refine Your Poster" step={5} titleAction={
+                 <button onClick={onStartOver} className="text-sm font-medium text-cyan-400 hover:text-cyan-300 hover:underline transition-colors">
+                    Start Over
+                </button>
+            }>
+                <p className="text-gray-400 text-sm mb-4">Give the AI instructions to change the poster. Try things like "change the background to a beach" or "add a lens flare effect".</p>
+                <textarea
+                    value={editPrompt}
+                    onChange={(e) => setEditPrompt(e.target.value)}
+                    placeholder="Your instructions..."
+                    className="w-full h-28 p-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
+                />
+            </Section>
+            <Button onClick={handleEditClick} isLoading={isLoading} disabled={!editPrompt} className="w-full">
+                <Icon icon="edit" className="h-5 w-5" />
+                Apply Edit
+            </Button>
+        </>
+      ) : editMode === 'create' ? (
         <>
           <Section title="Upload Product Image(s)" step={1}>
             <div onPaste={handleProductPaste} tabIndex={0} className="focus:outline-none focus:ring-2 focus:ring-cyan-500/50 rounded-lg p-1 -m-1">
@@ -264,21 +330,21 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           </Button>
         </>
       ) : (
-        <>
-            <Section title="Refine Your Poster" step={5}>
-                <p className="text-gray-400 text-sm mb-4">Give the AI instructions to change the poster. Try things like "change the background to a beach" or "add a lens flare effect".</p>
-                <textarea
-                    value={editPrompt}
-                    onChange={(e) => setEditPrompt(e.target.value)}
-                    placeholder="Your instructions..."
-                    className="w-full h-28 p-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
-                />
-            </Section>
-            <Button onClick={handleEditClick} isLoading={isLoading} disabled={!editPrompt} className="w-full">
-                <Icon icon="edit" className="h-5 w-5" />
-                Apply Edit
-            </Button>
-        </>
+        <Section title="Upload Image to Edit" step={1}>
+            <div onPaste={handleDirectEditPaste} className="focus:outline-none focus:ring-2 focus:ring-cyan-500/50 rounded-lg p-1 -m-1">
+                <label 
+                  htmlFor="direct-edit-upload"
+                  tabIndex={0}
+                  className="cursor-pointer flex flex-col items-center justify-center w-full h-48 border-2 border-gray-600 border-dashed rounded-lg bg-white/5 hover:bg-white/10 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-cyan-500"
+                >
+                    <Icon icon="gallery" className="h-12 w-12 text-gray-400 mb-3" />
+                    <p className="text-lg font-semibold text-gray-300">Upload Your Image</p>
+                    <p className="text-sm text-gray-400">Click or paste an image to start editing</p>
+                </label>
+                <input id="direct-edit-upload" type="file" className="hidden" accept="image/*" onChange={handleDirectEditChange} />
+            </div>
+            <p className="text-sm text-center text-gray-500 mt-4">Upload any image or poster you want to modify using AI.</p>
+        </Section>
       )}
     </div>
   );
